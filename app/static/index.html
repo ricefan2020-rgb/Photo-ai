@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#efe7da">
+  <title>衡研 · 美股日線策略分析</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="notice-wrap">
+    <p class="notice">本頁只供教育分析，並非財務意見。過往結果不能預測獲利。這裡不會連接券商，不會發出真實買賣指示，也不使用真實資金。</p>
+  </div>
+
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <span class="seal" aria-hidden="true">衡</span>
+        <div>
+          <h1>衡研</h1>
+          <p class="tagline">美股日線策略分析</p>
+        </div>
+      </div>
+      <p class="brand-note">用公開日線看看幾條簡單規則在某段歷史裡怎樣走。數字是計算結果，不是對之後價格的判斷。</p>
+    </header>
+
+    <main class="layout">
+      <form id="study" class="panel" novalidate>
+        <div class="panel-body">
+        <h2>回測設定</h2>
+
+        <div class="field">
+          <label for="symbol">代號</label>
+          <input id="symbol" name="symbol" type="text" value="SPY" maxlength="15" autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="latin">
+          <div class="chips symbols" role="group" aria-label="例子代號">
+            <button type="button" data-symbol="SPY" aria-pressed="true">SPY</button>
+            <button type="button" data-symbol="QQQ">QQQ</button>
+            <button type="button" data-symbol="AAPL">AAPL</button>
+            <button type="button" data-symbol="MSFT">MSFT</button>
+            <button type="button" data-symbol="IWM">IWM</button>
+          </div>
+        </div>
+
+        <div class="dates">
+          <div class="field">
+            <label for="start">開始日</label>
+            <input id="start" name="start" type="date" required>
+          </div>
+          <div class="field">
+            <label for="end">結束日</label>
+            <input id="end" name="end" type="date" required>
+          </div>
+        </div>
+        <div class="chips years" role="group" aria-label="常用區間">
+          <button type="button" data-years="1">近 1 年</button>
+          <button type="button" data-years="3">近 3 年</button>
+          <button type="button" data-years="5" aria-pressed="true">近 5 年</button>
+          <button type="button" data-years="10">近 10 年</button>
+        </div>
+
+        <fieldset>
+          <legend>策略</legend>
+          <label class="choice">
+            <input type="radio" name="strategy" value="buyhold">
+            <span>
+              <strong>買入並持有</strong>
+              <small>全程持有，用來對照。</small>
+            </span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="strategy" value="sma" checked>
+            <span>
+              <strong>均線交叉</strong>
+              <small>短均線高於長均線才持有。</small>
+            </span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="strategy" value="momentum">
+            <span>
+              <strong>簡單動量</strong>
+              <small>回看期升幅高於門檻才持有。</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <div class="params" data-panel="sma">
+          <div class="dates">
+            <div class="field">
+              <label for="fast">短均線（交易日）</label>
+              <input id="fast" name="fast" type="number" min="2" max="250" step="1" value="20">
+            </div>
+            <div class="field">
+              <label for="slow">長均線（交易日）</label>
+              <input id="slow" name="slow" type="number" min="3" max="400" step="1" value="50">
+            </div>
+          </div>
+          <p class="hint">短線要短於長線，預設 20 與 50。範圍是 2–250 與 3–400。</p>
+        </div>
+
+        <div class="params" data-panel="momentum" hidden>
+          <div class="dates">
+            <div class="field">
+              <label for="lookback">回看（交易日）</label>
+              <input id="lookback" name="lookback" type="number" min="5" max="504" step="1" value="60">
+            </div>
+            <div class="field">
+              <label for="threshold">門檻（%）</label>
+              <input id="threshold" name="threshold" type="number" min="-90" max="500" step="0.5" value="0" inputmode="decimal">
+            </div>
+          </div>
+          <p class="hint">升幅必須高於門檻才持有。門檻是這段回看期的升幅，不是年化。預設 60 日、0%。</p>
+        </div>
+
+        <details class="method">
+          <summary>計算方法</summary>
+          <ul>
+            <li>價格來自 Yahoo Finance 公開日線，優先用調整後收市價。這是免費、非官方的來源，可能缺日或暫時中斷。</li>
+            <li>訊號只用當日及之前的收市價，並假設以當日收市價成交。這是簡化，不代表真的可以在那個價格成交。</li>
+            <li>只會持有或轉為現金，不沽空，不加槓桿。現金沒有利息。</li>
+            <li>均線用簡單移動平均。短線等於長線時持有現金。動量用回看期內的升幅。</li>
+            <li>年化報酬用首尾交易日之間的日曆日數，按 365.25 日換算。最大回撤是由高位落到其後低位的最大跌幅。</li>
+            <li>勝率是報酬大於零的交易佔全部交易的比例。樣本最後一日仍持有的部位，會以當日收市價結算。</li>
+            <li>這些規則只描述一段歷史怎樣被計算，並不預測之後的價格，也不能用來推論可以獲利。</li>
+          </ul>
+        </details>
+        </div>
+        <div class="run-bar">
+          <p id="error" class="alert" hidden></p>
+          <label class="cost-line" for="cost" title="0 表示不計佣金，結果會比真實買賣樂觀。每次入場和出場各扣一次，上限 100。">
+            <span>單邊成本（基點）</span>
+            <input id="cost" name="cost" type="number" min="0" max="100" step="1" value="0" inputmode="numeric">
+          </label>
+          <button class="run" type="submit">執行回測</button>
+        </div>
+      </form>
+
+      <section class="results" id="results" aria-live="polite">
+        <p id="pending" class="pending">正在計算預設例子：SPY、近五年、20/50 均線。</p>
+        <div id="result-body" hidden>
+          <div class="result-head">
+            <p class="eyebrow">回測結果</p>
+            <h2 id="result-title">—</h2>
+            <p id="result-sub" class="sub"></p>
+            <p id="result-meta" class="meta"></p>
+          </div>
+
+          <div class="metrics" id="metrics"></div>
+          <p class="color-note">數字顏色依香港習慣：紅是上升，綠是下跌。勝率只計報酬大於零的交易；沒有交易就顯示破折號。</p>
+          <p id="benchmark-line" class="bench-line"></p>
+          <ul id="notes" class="notes" hidden></ul>
+
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>資產曲線</h3>
+              <div class="legend" id="legend">
+                <span><i class="swatch strategy"></i>策略</span>
+                <span id="bench-key"><i class="swatch bench"></i>買入並持有</span>
+              </div>
+            </div>
+            <p id="readout" class="readout"></p>
+            <div id="chart" class="chart"></div>
+            <p class="hint">曲線以起始 100 計，方便對照，並非真實戶口結餘。橫軸是交易日。</p>
+          </div>
+
+          <div class="trades-card">
+            <h3 id="trades-title">交易紀錄</h3>
+            <p id="trades-empty" class="empty" hidden>這段期間沒有完成的交易，組合一直持有現金。</p>
+            <div class="table-wrap" id="table-wrap" hidden>
+              <table>
+                <caption>報酬已計入單邊成本（如有）。標明「區間結束結算」的一筆，是樣本完結時仍持有，以最後收市價結算，並非當日出現賣出訊號。</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">入場</th>
+                    <th scope="col">出場</th>
+                    <th scope="col">入場價</th>
+                    <th scope="col">出場價</th>
+                    <th scope="col" title="由入場日至出場日的日曆日數">持有日數</th>
+                    <th scope="col">報酬</th>
+                    <th scope="col">出場原因</th>
+                  </tr>
+                </thead>
+                <tbody id="trades"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="closing">以上是這段歷史的計算結果，只供教育分析，並非財務意見。過往結果不能預測獲利。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
