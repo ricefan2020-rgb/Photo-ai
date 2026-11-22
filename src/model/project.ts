@@ -35,6 +35,8 @@ export type Project = {
   name: string;
   rotationDeg: number;
   leveled: boolean;
+  /** True after upload found a wall angle and turned the sheet. */
+  autoLeveled: boolean;
   imageWidth: number;
   imageHeight: number;
   calibration: Calibration | null;
@@ -49,6 +51,7 @@ export function createProject(name = "未命名案子"): Project {
     name,
     rotationDeg: 0,
     leveled: false,
+    autoLeveled: false,
     imageWidth: 0,
     imageHeight: 0,
     calibration: null,
@@ -109,6 +112,7 @@ export function sanitizeProject(value: unknown): Project | null {
     name: raw.name,
     rotationDeg: Number.isFinite(raw.rotationDeg) ? raw.rotationDeg! : 0,
     leveled: Boolean(raw.leveled),
+    autoLeveled: Boolean(raw.autoLeveled),
     imageWidth: Number.isFinite(raw.imageWidth) ? raw.imageWidth! : 0,
     imageHeight: Number.isFinite(raw.imageHeight) ? raw.imageHeight! : 0,
     calibration: calibration ?? null,

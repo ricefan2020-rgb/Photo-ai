@@ -188,6 +188,29 @@ button:disabled {
 .empty h2 { margin: 0 0 8px; font-weight: 600; }
 .empty p { margin: 0; max-width: 420px; color: #5c5348; }
 
+.level-banner {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  background: #1c3a2c;
+  color: #d7f0e2;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.auto-level {
+  margin: 0;
+  color: #d7f0e2;
+  background: #1c3a2c;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .loupe-wrap {
   position: absolute;
   right: 12px;
@@ -210,6 +233,7 @@ button:disabled {
 
 .statusbar { font-size: 13px; color: #f0c7bc; justify-content: space-between; }
 .statusbar .quiet { color: var(--muted); }
+.statusbar .leveled { color: #b7e4c7; }
 
 .side h2 { font-size: 13px; font-weight: 650; letter-spacing: 0.08em; margin: 16px 0 8px; color: var(--muted); }
 .side h2:first-child { margin-top: 0; }

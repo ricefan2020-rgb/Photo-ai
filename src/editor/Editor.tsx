@@ -6,6 +6,7 @@ import {
   normalizeDeg,
   rotationToLevel,
 } from "../geom/calibrate";
+import type { LevelEstimate } from "../geom/level";
 import { distance, type Point } from "../geom/points";
 import { derive, toleranceNote } from "../model/derive";
 import {
@@ -19,6 +20,7 @@ import {
 } from "../model/project";
 import { writeDxf } from "../dxf/write";
 import { clearCase, loadCase, saveCase } from "../storage/db";
+import { readUpload } from "./autoLevel";
 import { CanvasView, type EditorTool } from "./CanvasView";
 import { blobToDataUrl, dataUrlToBlob, downloadBlob } from "./download";
 
@@ -45,17 +47,15 @@ function hasWork(project: Project): boolean {
   );
 }
 
-function readImageSize(url: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    img.onerror = () => reject(new Error("無法讀取圖片"));
-    img.src = url;
-  });
-}
-
 function samePoint(a: Point, b: Point): boolean {
   return Math.abs(a.x - b.x) < 0.05 && Math.abs(a.y - b.y) < 0.05;
+}
+
+function levelMessage(level: LevelEstimate): string {
+  if (!level.confident) return "沒有找到明顯的牆線方向，請用手動旋轉或兩點拉平。";
+  const shown = Math.round(level.rotationDeg * 100) / 100;
+  if (Math.abs(shown) < 0.05) return "已自動拉正。牆與尺寸線已是水平與垂直。若不準，可用手動旋轉或兩點拉平。";
+  return `已自動拉正（${shown.toFixed(2)}°）。牆與尺寸線已轉成水平與垂直。若不準，可用手動旋轉或兩點拉平。`;
 }
 
 export function Editor() {
@@ -81,6 +81,7 @@ export function Editor() {
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
   const pdfBytesRef = useRef<ArrayBuffer | null>(null);
+  const uploadSeq = useRef(0);
   const imageUrlRef = useRef<string | null>(null);
   imageUrlRef.current = imageUrl;
 
@@ -212,22 +213,28 @@ export function Editor() {
     setFitNonce((value) => value + 1);
   }
 
-  function adoptImage(blob: Blob, width: number, height: number) {
+  function adoptImage(blob: Blob, width: number, height: number, level: LevelEstimate) {
     if (hasWork(project) && !window.confirm("換圖會清掉校正、覆核和已經描的牆。要繼續嗎？")) return false;
     if (imageUrl) URL.revokeObjectURL(imageUrl);
     setImageBlob(blob);
     setImageUrl(URL.createObjectURL(blob));
     setDraft([]);
     setSelectedWallId(null);
+    setLeveling(false);
     setProject((current) => ({
       ...createProject(current.name),
       imageWidth: width,
       imageHeight: height,
+      rotationDeg: level.confident ? level.rotationDeg : 0,
+      leveled: level.confident,
+      autoLeveled: level.confident,
     }));
+    setMessage(levelMessage(level));
     return true;
   }
 
   async function onUpload(file: File) {
+    const seq = ++uploadSeq.current;
     setMessage(null);
     try {
       const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -235,24 +242,23 @@ export function Editor() {
         const { rasterizePdf } = await import("../pdf/rasterize");
         const bytes = await file.arrayBuffer();
         const raster = await rasterizePdf(bytes, 1);
-        if (!adoptImage(raster.blob, raster.width, raster.height)) return;
+        const sheet = await readUpload(raster.blob);
+        if (seq !== uploadSeq.current) return;
+        if (!adoptImage(raster.blob, sheet.width, sheet.height, sheet.level)) return;
         pdfBytesRef.current = bytes;
         setPdfPages(raster.pageCount);
         setPdfPage(raster.pageNumber);
       } else {
-        const url = URL.createObjectURL(file);
-        try {
-          const size = await readImageSize(url);
-          if (!adoptImage(file, size.width, size.height)) return;
-        } finally {
-          URL.revokeObjectURL(url);
-        }
+        const sheet = await readUpload(file);
+        if (seq !== uploadSeq.current) return;
+        if (!adoptImage(file, sheet.width, sheet.height, sheet.level)) return;
         pdfBytesRef.current = null;
         setPdfPages(0);
       }
       setTool("straighten");
       setFitNonce((value) => value + 1);
     } catch (error) {
+      if (seq !== uploadSeq.current) return;
       setMessage(error instanceof Error ? error.message : "無法讀取檔案");
     }
   }
@@ -260,14 +266,18 @@ export function Editor() {
   async function changePage(page: number) {
     const bytes = pdfBytesRef.current;
     if (!bytes) return;
+    const seq = ++uploadSeq.current;
     try {
       const { rasterizePdf } = await import("../pdf/rasterize");
       const raster = await rasterizePdf(bytes, page);
-      if (!adoptImage(raster.blob, raster.width, raster.height)) return;
+      const sheet = await readUpload(raster.blob);
+      if (seq !== uploadSeq.current) return;
+      if (!adoptImage(raster.blob, sheet.width, sheet.height, sheet.level)) return;
       setPdfPage(raster.pageNumber);
       setPdfPages(raster.pageCount);
       setFitNonce((value) => value + 1);
     } catch (error) {
+      if (seq !== uploadSeq.current) return;
       setMessage(error instanceof Error ? error.message : "無法讀取這頁");
     }
   }
@@ -572,7 +582,12 @@ export function Editor() {
           </div>
           {tool === "straighten" && (
             <div className="stack">
-              <p>售樓說明書的圖常常整頁斜放。轉到牆是水平的，再量尺寸。拉正不改變比例。</p>
+              <p>上傳後會依牆線和尺寸線自動拉正，並直接顯示拉正後的圖。拉正不改變比例。若方向不對，用下面的旋轉或兩點拉平。</p>
+              {project.autoLeveled && (
+                <p className="auto-level" data-testid="auto-level-note">
+                  這張平面圖已自動拉正。
+                </p>
+              )}
               <div className="row">
                 <button type="button" onClick={() => rotateBy(-90)}>
                   左轉 90°
@@ -839,6 +854,11 @@ export function Editor() {
       </div>
       <footer className="statusbar">
         <span>{SITE_MEASURE_WARNING}</span>
+        {project.autoLeveled && (
+          <span className="leveled" data-testid="auto-level-status">
+            這張平面圖已自動拉正
+          </span>
+        )}
         <span className="quiet">覆核容許短 5 mm，不可長過圖上尺寸</span>
       </footer>
       <input
