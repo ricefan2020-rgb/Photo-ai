@@ -422,7 +422,12 @@ export function CanvasView({
       {!imageUrl && (
         <div className="empty">
           <h2>上傳一張售樓平面圖</h2>
-          <p>JPG、PNG，或 PDF 的一頁。整頁斜放時先拉正，再用圖上兩個已知公厘把比例定下來。</p>
+          <p>JPG、PNG，或 PDF 的一頁。斜放的圖會自動拉正，再用圖上兩個已知公厘把比例定下來。</p>
+        </div>
+      )}
+      {imageUrl && project.autoLeveled && (
+        <div className="level-banner" data-testid="auto-level-banner">
+          這張平面圖已自動拉正
         </div>
       )}
       <div className="loupe-wrap">
